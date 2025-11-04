@@ -889,6 +889,46 @@ app.delete('/admin/setores/:id', async (req, res) => {
 });
 
 /* ---------------------------
+   Rota: excluir usuário (ADMIN)
+----------------------------*/
+app.delete('/admin/usuarios/:id', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+
+    if (isNaN(userId) || userId <= 0) {
+      return res.status(400).json({ error: 'ID do usuário inválido' });
+    }
+
+    // Verificar se existem tickets do usuário
+    const [tickets] = await dbPromise.query(
+      'SELECT 1 FROM CHAMADOS WHERE ID_CLIENTE = ? LIMIT 1',
+      [userId]
+    );
+
+    if (tickets.length > 0) {
+      return res.status(409).json({ 
+        error: 'Não é possível excluir usuário com tickets associados' 
+      });
+    }
+
+    const [result] = await dbPromise.query(
+      'DELETE FROM CLIENTES WHERE ID_CLIENTE = ?',
+      [userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    res.json({ message: 'Usuário excluído com sucesso' });
+
+  } catch (err) {
+    console.error('[DELETE /admin/usuarios/:id] erro:', err.message);
+    res.status(500).json({ error: 'Erro interno ao excluir usuário' });
+  }
+});
+
+/* ---------------------------
    Inicializa o servidor
 ----------------------------*/
 const PORT = process.env.PORT || 3000;
