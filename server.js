@@ -788,6 +788,107 @@ app.get('/admin/usuarios', async (req, res) => {
 });
 
 /* ---------------------------
+   Rota: listar todos os setores (ADMIN)
+----------------------------*/
+app.get('/admin/setores', async (req, res) => {
+  try {
+    console.log('📋 Buscando lista de setores para admin...');
+    
+    const [rows] = await dbPromise.query(
+      `SELECT 
+         ID_Setor as id, 
+         Nome
+       FROM SETORES 
+       ORDER BY Nome`
+    );
+    
+    console.log(`✅ Encontrados ${rows.length} setores`);
+    res.json(rows);
+    
+  } catch (err) {
+    console.error('[GET /admin/setores] erro:', err.message);
+    res.status(500).json({ error: 'Erro interno ao buscar setores' });
+  }
+});
+
+/* ---------------------------
+   Rota: criar novo setor (ADMIN)
+----------------------------*/
+app.post('/admin/setores', async (req, res) => {
+  try {
+    const { Nome } = req.body;
+
+    if (!Nome || Nome.trim() === '') {
+      return res.status(400).json({ error: 'Nome do setor é obrigatório' });
+    }
+
+    // Verificar se setor já existe
+    const [exists] = await dbPromise.query(
+      'SELECT 1 FROM SETORES WHERE LOWER(Nome) = LOWER(?) LIMIT 1',
+      [Nome.trim()]
+    );
+
+    if (exists.length > 0) {
+      return res.status(409).json({ error: 'Setor já existe' });
+    }
+
+    const [result] = await dbPromise.query(
+      'INSERT INTO SETORES (Nome) VALUES (?)',
+      [Nome.trim()]
+    );
+
+    res.status(201).json({
+      message: 'Setor criado com sucesso',
+      id: result.insertId
+    });
+
+  } catch (err) {
+    console.error('[POST /admin/setores] erro:', err.message);
+    res.status(500).json({ error: 'Erro interno ao criar setor' });
+  }
+});
+
+/* ---------------------------
+   Rota: excluir setor (ADMIN)
+----------------------------*/
+app.delete('/admin/setores/:id', async (req, res) => {
+  try {
+    const setId = parseInt(req.params.id, 10);
+
+    if (isNaN(setId) || setId <= 0) {
+      return res.status(400).json({ error: 'ID do setor inválido' });
+    }
+
+    // Verificar se existem tickets usando este setor
+    const [tickets] = await dbPromise.query(
+      'SELECT 1 FROM CHAMADOS WHERE ID_SETOR = ? LIMIT 1',
+      [setId]
+    );
+
+    if (tickets.length > 0) {
+      return res.status(409).json({ 
+        error: 'Não é possível excluir setor com tickets associados' 
+      });
+    }
+
+    const [result] = await dbPromise.query(
+      'DELETE FROM SETORES WHERE ID_Setor = ?',
+      [setId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Setor não encontrado' });
+    }
+
+    res.json({ message: 'Setor excluído com sucesso' });
+
+  } catch (err) {
+    console.error('[DELETE /admin/setores/:id] erro:', err.message);
+    res.status(500).json({ error: 'Erro interno ao excluir setor' });
+  }
+});
+
+/* ---------------------------
    Inicializa o servidor
 ----------------------------*/
 const PORT = process.env.PORT || 3000;
