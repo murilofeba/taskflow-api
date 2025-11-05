@@ -184,9 +184,9 @@ app.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e Senha são obrigatórios.' });
     }
 
-    // Buscar usuário
+    // ✅ BUSCAR USUÁRIO ATIVO
     const [rows] = await dbPromise.query(
-      'SELECT ID_CLIENTE, Nome, Email, Senha_hash, Perfil_Acesso FROM CLIENTES WHERE LOWER(Email) = LOWER(?) LIMIT 1',
+      'SELECT ID_CLIENTE, Nome, Email, Senha_hash, Perfil_Acesso FROM CLIENTES WHERE LOWER(Email) = LOWER(?) AND Ativo = 1 LIMIT 1',
       [Email.trim()]
     );
 
@@ -234,8 +234,9 @@ app.post('/login', async (req, res) => {
 ----------------------------*/
 app.get('/usuarios', async (req, res) => {
   try {
+    // ✅ LISTAR APENAS USUÁRIOS ATIVOS
     const [rows] = await dbPromise.query(
-      'SELECT ID_CLIENTE, Nome FROM CLIENTES ORDER BY Nome'
+      'SELECT ID_CLIENTE, Nome FROM CLIENTES WHERE Ativo = 1 ORDER BY Nome'
     );
     const mapped = rows.map(r => ({ id: r.ID_CLIENTE, nome: r.Nome }));
     res.json(mapped);
@@ -757,12 +758,14 @@ app.get('/admin/usuarios', async (req, res) => {
   try {
     console.log('📋 Buscando lista de usuários para admin...');
     
+    // ✅ LISTAR TODOS OS USUÁRIOS (ativos e inativos)
     const [rows] = await dbPromise.query(
       `SELECT 
          ID_CLIENTE as id, 
          Nome, 
          Email, 
-         Perfil_Acesso
+         Perfil_Acesso,
+         Ativo  // ✅ ADICIONAR CAMPO ATIVO
        FROM CLIENTES 
        ORDER BY Nome`
     );
@@ -773,7 +776,8 @@ app.get('/admin/usuarios', async (req, res) => {
       id: user.id,
       nome: user.Nome,
       email: user.Email,
-      perfilAcesso: user.Perfil_Acesso || 'Usuario' // valor padrão se for null
+      perfilAcesso: user.Perfil_Acesso || 'Usuario',
+      ativo: user.Ativo === 1  // ✅ ADICIONAR STATUS
     }));
     
     res.json(usuarios);
@@ -889,7 +893,7 @@ app.delete('/admin/setores/:id', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: excluir usuário (ADMIN)
+   Rota: excluir usuário (ADMIN) - SOFT DELETE
 ----------------------------*/
 app.delete('/admin/usuarios/:id', async (req, res) => {
   try {
@@ -899,20 +903,9 @@ app.delete('/admin/usuarios/:id', async (req, res) => {
       return res.status(400).json({ error: 'ID do usuário inválido' });
     }
 
-    // Verificar se existem tickets do usuário
-    const [tickets] = await dbPromise.query(
-      'SELECT 1 FROM CHAMADOS WHERE ID_CLIENTE = ? LIMIT 1',
-      [userId]
-    );
-
-    if (tickets.length > 0) {
-      return res.status(409).json({ 
-        error: 'Não é possível excluir usuário com tickets associados' 
-      });
-    }
-
+    // ✅ SOFT DELETE: Marcar como inativo em vez de excluir
     const [result] = await dbPromise.query(
-      'DELETE FROM CLIENTES WHERE ID_CLIENTE = ?',
+      'UPDATE CLIENTES SET Ativo = 0 WHERE ID_CLIENTE = ?',
       [userId]
     );
 
@@ -920,11 +913,14 @@ app.delete('/admin/usuarios/:id', async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    res.json({ message: 'Usuário excluído com sucesso' });
+    res.json({ 
+      message: 'Usuário desativado com sucesso. Os tickets associados foram preservados.',
+      usuario_desativado: true 
+    });
 
   } catch (err) {
     console.error('[DELETE /admin/usuarios/:id] erro:', err.message);
-    res.status(500).json({ error: 'Erro interno ao excluir usuário' });
+    res.status(500).json({ error: 'Erro interno ao desativar usuário' });
   }
 });
 
