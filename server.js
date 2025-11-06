@@ -800,19 +800,19 @@ app.get('/admin/setores', async (req, res) => {
   try {
     console.log('📋 Buscando lista de setores para admin...');
     
-    // ✅ CORREÇÃO: Usar aliases em camelCase
+    // ✅ CORREÇÃO: SQL sem comentários e com campos consistentes
     const [rows] = await dbPromise.query(
       `SELECT 
          ID_Setor as id, 
-         Nome as nome,           // ✅ "nome" minúsculo
-         Ativo as ativo          // ✅ "ativo" minúsculo
+         Nome as nome,
+         Ativo as ativo
        FROM SETORES 
        ORDER BY Nome`
     );
     
     console.log(`✅ Encontrados ${rows.length} setores`);
     
-    // ✅ CORREÇÃO: Retornar diretamente (já está mapeado)
+    // ✅ Retornar dados consistentes
     res.json(rows);
     
   } catch (err) {
