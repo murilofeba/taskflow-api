@@ -753,35 +753,29 @@ app.put('/admin/usuarios/:id', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: listar todos os usuários (ADMIN)
+   Rota: listar todos os usuários (ADMIN) - CORRIGIDO
 ----------------------------*/
 app.get('/admin/usuarios', async (req, res) => {
   try {
     console.log('📋 Buscando lista de usuários para admin...');
     
-    // ✅ LISTAR TODOS OS USUÁRIOS (ativos e inativos)
+    // ✅ CORREÇÃO: Incluir campo Ativo e mapear CORRETAMENTE
     const [rows] = await dbPromise.query(
       `SELECT 
          ID_CLIENTE as id, 
-         Nome, 
-         Email, 
-         Perfil_Acesso,
-         Ativo  // ✅ ADICIONAR CAMPO ATIVO
+         Nome as nome,           // ✅ CORRIGIDO: 'nome' minúsculo
+         Email as email,         // ✅ CORRIGIDO: 'email' minúsculo  
+         Perfil_Acesso as perfilAcesso, // ✅ CORRIGIDO: camelCase
+         Ativo as ativo          // ✅ CORRIGIDO: 'ativo' minúsculo
        FROM CLIENTES 
        ORDER BY Nome`
     );
     
     console.log(`✅ Encontrados ${rows.length} usuários`);
     
-    const usuarios = rows.map(user => ({
-      id: user.id,
-      nome: user.Nome,
-      email: user.Email,
-      perfilAcesso: user.Perfil_Acesso || 'Usuario',
-      ativo: user.Ativo === 1  // ✅ ADICIONAR STATUS
-    }));
-    
-    res.json(usuarios);
+    // ✅ CORREÇÃO: Remover mapeamento manual desnecessário
+    // O banco já retorna com os nomes corretos graças ao 'as'
+    res.json(rows);
     
   } catch (err) {
     console.error('[GET /admin/usuarios] erro:', err.message);
