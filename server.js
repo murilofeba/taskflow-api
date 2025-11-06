@@ -251,8 +251,9 @@ app.get('/usuarios', async (req, res) => {
 ----------------------------*/
 app.get('/setores', async (req, res) => {
   try {
+    // ✅ LISTAR APENAS SETORES ATIVOS
     const [rows] = await dbPromise.query(
-      'SELECT ID_Setor, Nome FROM SETORES ORDER BY Nome'
+      'SELECT ID_Setor, Nome FROM SETORES WHERE Ativo = 1 ORDER BY Nome'
     );
     const mapped = rows.map(r => ({ id: r.ID_Setor, nome: r.Nome }));
     res.json(mapped);
@@ -798,16 +799,18 @@ app.get('/admin/setores', async (req, res) => {
   try {
     console.log('📋 Buscando lista de setores para admin...');
     
+    // ✅ LISTAR TODOS OS SETORES (ativos e inativos)
     const [rows] = await dbPromise.query(
       `SELECT 
          ID_Setor as id, 
-         Nome
+         Nome,
+         Ativo  // ✅ ADICIONAR CAMPO ATIVO
        FROM SETORES 
        ORDER BY Nome`
     );
     
     console.log(`✅ Encontrados ${rows.length} setores`);
-    res.json(rows);
+    res.json(rows); // Já inclui o campo Ativo
     
   } catch (err) {
     console.error('[GET /admin/setores] erro:', err.message);
@@ -826,16 +829,32 @@ app.post('/admin/setores', async (req, res) => {
       return res.status(400).json({ error: 'Nome do setor é obrigatório' });
     }
 
-    // Verificar se setor já existe
+    // ✅ VERIFICAR SE SETOR JÁ EXISTE (INCLUINDO INATIVOS)
     const [exists] = await dbPromise.query(
-      'SELECT 1 FROM SETORES WHERE LOWER(Nome) = LOWER(?) LIMIT 1',
+      'SELECT ID_Setor, Ativo FROM SETORES WHERE LOWER(Nome) = LOWER(?) LIMIT 1',
       [Nome.trim()]
     );
 
     if (exists.length > 0) {
-      return res.status(409).json({ error: 'Setor já existe' });
+      const setorExistente = exists[0];
+      if (setorExistente.Ativo === 0) {
+        // ✅ REATIVAR SETOR INATIVO
+        await dbPromise.query(
+          'UPDATE SETORES SET Ativo = 1 WHERE ID_Setor = ?',
+          [setorExistente.ID_Setor]
+        );
+        
+        return res.json({
+          message: 'Setor reativado com sucesso',
+          id: setorExistente.ID_Setor,
+          reativado: true
+        });
+      } else {
+        return res.status(409).json({ error: 'Setor já existe' });
+      }
     }
 
+    // Criar novo setor
     const [result] = await dbPromise.query(
       'INSERT INTO SETORES (Nome) VALUES (?)',
       [Nome.trim()]
@@ -851,9 +870,8 @@ app.post('/admin/setores', async (req, res) => {
     res.status(500).json({ error: 'Erro interno ao criar setor' });
   }
 });
-
 /* ---------------------------
-   Rota: excluir setor (ADMIN)
+   Rota: excluir setor (ADMIN) - SOFT DELETE
 ----------------------------*/
 app.delete('/admin/setores/:id', async (req, res) => {
   try {
@@ -863,20 +881,9 @@ app.delete('/admin/setores/:id', async (req, res) => {
       return res.status(400).json({ error: 'ID do setor inválido' });
     }
 
-    // Verificar se existem tickets usando este setor
-    const [tickets] = await dbPromise.query(
-      'SELECT 1 FROM CHAMADOS WHERE ID_SETOR = ? LIMIT 1',
-      [setId]
-    );
-
-    if (tickets.length > 0) {
-      return res.status(409).json({ 
-        error: 'Não é possível excluir setor com tickets associados' 
-      });
-    }
-
+    // ✅ SOFT DELETE: Marcar como inativo em vez de excluir
     const [result] = await dbPromise.query(
-      'DELETE FROM SETORES WHERE ID_Setor = ?',
+      'UPDATE SETORES SET Ativo = 0 WHERE ID_Setor = ?',
       [setId]
     );
 
@@ -884,11 +891,14 @@ app.delete('/admin/setores/:id', async (req, res) => {
       return res.status(404).json({ error: 'Setor não encontrado' });
     }
 
-    res.json({ message: 'Setor excluído com sucesso' });
+    res.json({ 
+      message: 'Setor desativado com sucesso. Os tickets associados foram preservados.',
+      setor_desativado: true 
+    });
 
   } catch (err) {
     console.error('[DELETE /admin/setores/:id] erro:', err.message);
-    res.status(500).json({ error: 'Erro interno ao excluir setor' });
+    res.status(500).json({ error: 'Erro interno ao desativar setor' });
   }
 });
 
@@ -903,7 +913,8 @@ app.delete('/admin/usuarios/:id', async (req, res) => {
       return res.status(400).json({ error: 'ID do usuário inválido' });
     }
 
-    // ✅ SOFT DELETE: Marcar como inativo em vez de excluir
+    // ✅ REMOVER VERIFICAÇÃO DE TICKETS - SOFT DELETE DEVE PERMITIR SEMPRE
+    // Apenas marcar como inativo
     const [result] = await dbPromise.query(
       'UPDATE CLIENTES SET Ativo = 0 WHERE ID_CLIENTE = ?',
       [userId]
@@ -914,13 +925,56 @@ app.delete('/admin/usuarios/:id', async (req, res) => {
     }
 
     res.json({ 
-      message: 'Usuário desativado com sucesso. Os tickets associados foram preservados.',
+      message: 'Usuário desativado com sucesso',
       usuario_desativado: true 
     });
 
   } catch (err) {
     console.error('[DELETE /admin/usuarios/:id] erro:', err.message);
     res.status(500).json({ error: 'Erro interno ao desativar usuário' });
+  }
+});
+
+/* ---------------------------
+   Rota: reativar usuário/setor (ADMIN)
+----------------------------*/
+app.put('/admin/reativar/:tipo/:id', async (req, res) => {
+  try {
+    const { tipo, id } = req.params;
+    const entityId = parseInt(id, 10);
+
+    if (isNaN(entityId) || entityId <= 0) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
+
+    let table, field;
+    if (tipo === 'usuario') {
+      table = 'CLIENTES';
+      field = 'ID_CLIENTE';
+    } else if (tipo === 'setor') {
+      table = 'SETORES'; 
+      field = 'ID_Setor';
+    } else {
+      return res.status(400).json({ error: 'Tipo inválido. Use "usuario" ou "setor"' });
+    }
+
+    const [result] = await dbPromise.query(
+      `UPDATE ${table} SET Ativo = 1 WHERE ${field} = ?`,
+      [entityId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: `${tipo} não encontrado` });
+    }
+
+    res.json({ 
+      message: `${tipo.charAt(0).toUpperCase() + tipo.slice(1)} reativado com sucesso`,
+      reativado: true 
+    });
+
+  } catch (err) {
+    console.error(`[PUT /admin/reativar/${tipo}] erro:`, err.message);
+    res.status(500).json({ error: `Erro interno ao reativar ${tipo}` });
   }
 });
 
