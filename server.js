@@ -939,7 +939,7 @@ app.delete('/admin/usuarios/:id', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: reativar usuário/setor (ADMIN)
+   Rota: reativar usuário/setor (ADMIN) - VERIFICAR
 ----------------------------*/
 app.put('/admin/reativar/:tipo/:id', async (req, res) => {
   try {
@@ -961,6 +961,7 @@ app.put('/admin/reativar/:tipo/:id', async (req, res) => {
       return res.status(400).json({ error: 'Tipo inválido. Use "usuario" ou "setor"' });
     }
 
+    // ✅ VERIFICAR se está atualizando corretamente
     const [result] = await dbPromise.query(
       `UPDATE ${table} SET Ativo = 1 WHERE ${field} = ?`,
       [entityId]
