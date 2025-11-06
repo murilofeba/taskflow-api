@@ -794,24 +794,26 @@ app.get('/admin/usuarios', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: listar todos os setores (ADMIN)
+   Rota: listar todos os setores (ADMIN) - CORRIGIDO
 ----------------------------*/
 app.get('/admin/setores', async (req, res) => {
   try {
     console.log('📋 Buscando lista de setores para admin...');
     
-    // ✅ LISTAR TODOS OS SETORES (ativos e inativos)
+    // ✅ CORREÇÃO: Usar aliases em camelCase
     const [rows] = await dbPromise.query(
       `SELECT 
          ID_Setor as id, 
-         Nome,
-         Ativo  // ✅ ADICIONAR CAMPO ATIVO
+         Nome as nome,           // ✅ "nome" minúsculo
+         Ativo as ativo          // ✅ "ativo" minúsculo
        FROM SETORES 
        ORDER BY Nome`
     );
     
     console.log(`✅ Encontrados ${rows.length} setores`);
-    res.json(rows); // Já inclui o campo Ativo
+    
+    // ✅ CORREÇÃO: Retornar diretamente (já está mapeado)
+    res.json(rows);
     
   } catch (err) {
     console.error('[GET /admin/setores] erro:', err.message);
