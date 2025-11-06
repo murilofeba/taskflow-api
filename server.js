@@ -357,9 +357,9 @@ app.get('/tickets', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: criar ticket (CHAMADO) com imagem opcional
+   Rota: criar ticket (CHAMADO) com múltiplas imagens
 ----------------------------*/
-app.post('/tickets', upload.single('Imagem'), async (req, res) => {
+app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
   try {
     const { Titulo, Descricao, Prioridade, ID_Cliente, Nome_Cliente, ID_Setor } = req.body;
 
@@ -374,19 +374,23 @@ app.post('/tickets', upload.single('Imagem'), async (req, res) => {
 
     const dataAbertura = new Date();
 
-    // Salvar imagem (opcional)
-    let imagemPath = null;
-    if (req.file) {
+    // ✅ PROCESSAR MÚLTIPLAS IMAGENS
+    let imagensPaths = [];
+    if (req.files && req.files.length > 0) {
       const uploadDir = path.join(process.cwd(), 'uploads');
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
-      const fileName = `${Date.now()}_${req.file.originalname}`;
-      const filePath = path.join(uploadDir, fileName);
-      fs.writeFileSync(filePath, req.file.buffer);
-      imagemPath = fileName;
+      
+      for (let file of req.files) {
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.originalname}`;
+        const filePath = path.join(uploadDir, fileName);
+        fs.writeFileSync(filePath, file.buffer);
+        imagensPaths.push(fileName);
+      }
     }
 
+    // ✅ INSERIR TICKET NO BANCO
     const [result] = await dbPromise.query(
       `INSERT INTO CHAMADOS 
        (Titulo, Descricao, ChamadoStatus, Data_Abertura, Data_Fechamento, Prioridade, ID_CLIENTE, Nome_Cliente, ID_SETOR, Imagem)
@@ -401,10 +405,11 @@ app.post('/tickets', upload.single('Imagem'), async (req, res) => {
         parseInt(ID_Cliente, 10),
         Nome_Cliente.trim(),
         ID_Setor || null,
-        imagemPath
+        imagensPaths.length > 0 ? imagensPaths.join(',') : null // Salva como string separada por vírgulas
       ]
     );
 
+    // ✅ BUSCAR TICKET CRIADO
     const [rows] = await dbPromise.query(
       `SELECT
          t.ID_CHAMADO AS ID_Ticket,
@@ -426,11 +431,18 @@ app.post('/tickets', upload.single('Imagem'), async (req, res) => {
     );
 
     const ticket = rows[0];
-    ticket.Imagem = ticket.Imagem ? `/uploads/${ticket.Imagem}` : null;
+    
+    // ✅ FORMATAR IMAGENS PARA RETORNO
+    if (ticket.Imagem) {
+      const imageArray = ticket.Imagem.split(',');
+      ticket.Imagens = imageArray.map(img => `/uploads/${img}`);
+    } else {
+      ticket.Imagens = [];
+    }
 
     res.status(201).json({
       message: 'Ticket criado com sucesso',
-      ticket
+      ticket: ticket
     });
 
   } catch (err) {
