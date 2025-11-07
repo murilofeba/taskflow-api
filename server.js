@@ -452,7 +452,7 @@ app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: buscar ticket por ID
+   Rota: buscar ticket por ID - ATUALIZADA
 ----------------------------*/
 app.get('/tickets/:id', async (req, res) => {
   try {
@@ -488,7 +488,22 @@ app.get('/tickets/:id', async (req, res) => {
     }
 
     const ticket = rows[0];
-    ticket.Imagem = ticket.Imagem ? `/uploads/${ticket.Imagem}` : null;
+    
+    // ✅ FORMATAR IMAGENS CORRETAMENTE
+    if (ticket.Imagem) {
+      // Se a imagem está salva como string separada por vírgulas
+      if (ticket.Imagem.includes(',')) {
+        const imageArray = ticket.Imagem.split(',');
+        ticket.Imagens = imageArray.map(img => `/uploads/${img}`);
+        ticket.Imagem = null; // Limpar o campo antigo
+      } else {
+        // Imagem única
+        ticket.Imagem = `/uploads/${ticket.Imagem}`;
+        ticket.Imagens = [ticket.Imagem];
+      }
+    } else {
+      ticket.Imagens = [];
+    }
 
     res.json(ticket);
   } catch (err) {
@@ -991,6 +1006,82 @@ app.put('/admin/reativar/:tipo/:id', async (req, res) => {
   } catch (err) {
     console.error(`[PUT /admin/reativar/${tipo}] erro:`, err.message);
     res.status(500).json({ error: `Erro interno ao reativar ${tipo}` });
+  }
+});
+
+/* ---------------------------
+   Rota: atualizar imagens do ticket - NOVA ROTA
+----------------------------*/
+app.put('/tickets/:id/imagens', upload.array('Imagens', 5), async (req, res) => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    const { imagens_remover } = req.body; // Array de imagens para remover
+
+    // Buscar ticket atual
+    const [ticketRows] = await dbPromise.query(
+      'SELECT Imagem FROM CHAMADOS WHERE ID_CHAMADO = ?',
+      [ticketId]
+    );
+
+    if (ticketRows.length === 0) {
+      return res.status(404).json({ error: 'Ticket não encontrado.' });
+    }
+
+    let imagensAtuais = [];
+    if (ticketRows[0].Imagem) {
+      imagensAtuais = ticketRows[0].Imagem.split(',');
+    }
+
+    // Remover imagens especificadas
+    if (imagens_remover) {
+      const imagensParaRemover = JSON.parse(imagens_remover);
+      imagensAtuais = imagensAtuais.filter(img => !imagensParaRemover.includes(img));
+      
+      // Opcional: deletar arquivos físicos do servidor
+      // for (let img of imagensParaRemover) {
+      //   const filePath = path.join(process.cwd(), 'uploads', img);
+      //   if (fs.existsSync(filePath)) {
+      //     fs.unlinkSync(filePath);
+      //   }
+      // }
+    }
+
+    // Adicionar novas imagens
+    let novasImagensPaths = [];
+    if (req.files && req.files.length > 0) {
+      const uploadDir = path.join(process.cwd(), 'uploads');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      for (let file of req.files) {
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.originalname}`;
+        const filePath = path.join(uploadDir, fileName);
+        fs.writeFileSync(filePath, file.buffer);
+        novasImagensPaths.push(fileName);
+      }
+    }
+
+    // Combinar imagens
+    const todasImagens = [...imagensAtuais, ...novasImagensPaths];
+    const imagemFinal = todasImagens.length > 0 ? todasImagens.join(',') : null;
+
+    // Atualizar banco
+    await dbPromise.query(
+      'UPDATE CHAMADOS SET Imagem = ? WHERE ID_CHAMADO = ?',
+      [imagemFinal, ticketId]
+    );
+
+    res.json({ 
+      message: 'Imagens atualizadas com sucesso',
+      imagens_adicionadas: novasImagensPaths.length,
+      imagens_removidas: imagens_remover ? JSON.parse(imagens_remover).length : 0,
+      total_imagens: todasImagens.length
+    });
+
+  } catch (err) {
+    console.error('[PUT /tickets/:id/imagens] erro:', err.message);
+    res.status(500).json({ error: 'Erro interno' });
   }
 });
 
