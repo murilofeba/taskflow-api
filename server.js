@@ -350,9 +350,9 @@ app.get('/tickets', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: criar ticket (CHAMADO) com múltiplas imagens - COMPLETA
+   Rota: criar ticket com MÚLTIPLAS imagens - CORRIGIDA
 ----------------------------*/
-app.post('/tickets', upload.array('Imagem', 5), async (req, res) => {
+app.post('/tickets', upload.array('Imagens', 5), async (req, res) => { // ✅ Mude para 'Imagens' PLURAL
     try {
         console.log('📝 Criando novo ticket...');
         console.log('📦 Dados recebidos:', req.body);
@@ -406,7 +406,7 @@ app.post('/tickets', upload.array('Imagem', 5), async (req, res) => {
                 parseInt(ID_Cliente, 10),
                 Nome_Cliente.trim(),
                 ID_Setor || null,
-                imagensPaths.length > 0 ? imagensPaths.join(',') : null
+                imagensPaths.length > 0 ? imagensPaths.join(',') : null // Salva como string separada por vírgulas
             ]
         );
 
