@@ -352,7 +352,7 @@ app.get('/tickets', async (req, res) => {
 /* ---------------------------
    Rota: criar ticket (CHAMADO) com múltiplas imagens - COMPLETA
 ----------------------------*/
-app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
+app.post('/tickets', upload.array('Imagem', 5), async (req, res) => {
     try {
         console.log('📝 Criando novo ticket...');
         console.log('📦 Dados recebidos:', req.body);
