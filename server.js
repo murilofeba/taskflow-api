@@ -274,11 +274,15 @@ app.get('/ticket-metadata', (req, res) => {
 });
 
 /* ---------------------------
-   Rota: listar tickets (CHAMADOS) - CORRIGIDA
+   Rota: listar tickets (CHAMADOS) - CORRIGIDA COM FILTROS
 ----------------------------*/
 app.get('/tickets', async (req, res) => {
     try {
         const { status, priority, user, sector, limit, offset } = req.query;
+
+        console.log('🔍 Filtros recebidos:', {
+            status, priority, user, sector, limit, offset
+        });
 
         let sql = `
             SELECT
@@ -303,12 +307,53 @@ app.get('/tickets', async (req, res) => {
 
         const params = [];
 
-        // ... (filtros permanecem iguais) ...
+        // ✅✅✅ FILTRO DE STATUS - CORRIGIDO
+        if (status && status !== 'null' && status !== 'Status') {
+            sql += ' AND t.ChamadoStatus = ?';
+            params.push(status);
+            console.log('✅ Aplicando filtro status:', status);
+        }
+
+        // ✅✅✅ FILTRO DE PRIORIDADE - CORRIGIDO
+        if (priority && priority !== 'null' && priority !== 'Prioridade') {
+            sql += ' AND t.Prioridade = ?';
+            params.push(priority);
+            console.log('✅ Aplicando filtro prioridade:', priority);
+        }
+
+        // ✅✅✅ FILTRO DE USUÁRIO - CORRIGIDO
+        if (user && user !== 'null' && user !== '0') {
+            sql += ' AND t.ID_CLIENTE = ?';
+            params.push(parseInt(user, 10));
+            console.log('✅ Aplicando filtro usuário:', user);
+        }
+
+        // ✅✅✅ FILTRO DE SETOR - CORRIGIDO
+        if (sector && sector !== 'null' && sector !== '0') {
+            sql += ' AND t.ID_SETOR = ?';
+            params.push(parseInt(sector, 10));
+            console.log('✅ Aplicando filtro setor:', sector);
+        }
+
+        // ✅✅✅ ORDENAÇÃO CORRETA - MAIS RECENTES PRIMEIRO
+        sql += ' ORDER BY t.Data_Abertura DESC';
+
+        // ✅✅✅ PAGINAÇÃO SEGURA
+        const safeLimit = Math.min(parseInt(limit, 10) || 50, 100);
+        const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
+
+        sql += ' LIMIT ? OFFSET ?';
+        params.push(safeLimit, safeOffset);
+
+        console.log('📋 SQL final:', sql);
+        console.log('🔢 Parâmetros:', params);
 
         const [rows] = await dbPromise.query(sql, params);
 
+        console.log('🎫 Tickets encontrados:', rows.length);
+
         const mapped = rows.map(r => {
-            // ✅✅✅ PROCESSAR IMAGENS CORRETAMENTE NA LISTA
+            // ✅ PROCESSAR IMAGENS CORRETAMENTE NA LISTA
             let imagens = [];
             if (r.Imagem) {
                 if (r.Imagem.includes(',')) {
@@ -337,15 +382,16 @@ app.get('/tickets', async (req, res) => {
                 ClienteNome: r.ClienteNome,
                 SetorNome: r.SetorNome,
                 Tecnico: r.Tecnico,
-                Imagem: imagens.length > 0 ? imagens[0] : null, // Campo antigo para compatibilidade
-                Imagens: imagens // ✅ NOVO CAMPO COM ARRAY DE IMAGENS
+                Imagem: imagens.length > 0 ? imagens[0] : null,
+                Imagens: imagens
             };
         });
 
         res.json(mapped);
+
     } catch (err) {
         console.error('[GET /tickets] erro:', err.message);
-        res.status(500).json({ error: 'Erro interno' });
+        res.status(500).json({ error: 'Erro interno: ' + err.message });
     }
 });
 
