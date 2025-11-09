@@ -350,7 +350,7 @@ app.get('/tickets', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: criar ticket (CHAMADO) com múltiplas imagens - COM LOGS
+   Rota: criar ticket (CHAMADO) com múltiplas imagens - COMPLETA
 ----------------------------*/
 app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
     try {
@@ -360,7 +360,16 @@ app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
 
         const { Titulo, Descricao, Prioridade, ID_Cliente, Nome_Cliente, ID_Setor } = req.body;
 
-        // ... (validações permanecem) ...
+        if (!Titulo || !Descricao || !Prioridade || !ID_Cliente || !Nome_Cliente) {
+            return res.status(400).json({ error: 'Título, Descrição, Prioridade e Cliente são obrigatórios.' });
+        }
+
+        // Validar prioridade
+        if (!['Baixa', 'Média', 'Alta'].includes(Prioridade)) {
+            return res.status(400).json({ error: 'Prioridade inválida' });
+        }
+
+        const dataAbertura = new Date();
 
         // ✅ PROCESSAR MÚLTIPLAS IMAGENS
         let imagensPaths = [];
@@ -382,10 +391,72 @@ app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
 
         console.log('📋 Imagens a serem salvas no banco:', imagensPaths);
 
-        // ... (resto do código permanece) ...
+        // ✅ INSERIR TICKET NO BANCO
+        const [result] = await dbPromise.query(
+            `INSERT INTO CHAMADOS 
+             (Titulo, Descricao, ChamadoStatus, Data_Abertura, Data_Fechamento, Prioridade, ID_CLIENTE, Nome_Cliente, ID_SETOR, Imagem)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                Titulo.trim(),
+                Descricao.trim(),
+                'Aberto',
+                dataAbertura,
+                null,
+                Prioridade,
+                parseInt(ID_Cliente, 10),
+                Nome_Cliente.trim(),
+                ID_Setor || null,
+                imagensPaths.length > 0 ? imagensPaths.join(',') : null
+            ]
+        );
+
+        console.log('✅ Ticket criado no banco com ID:', result.insertId);
+
+        // ✅ BUSCAR TICKET CRIADO
+        const [rows] = await dbPromise.query(
+            `SELECT
+                 t.ID_CHAMADO AS ID_Ticket,
+                 t.Titulo,
+                 t.Descricao,
+                 t.ChamadoStatus AS TicketStatus,
+                 t.Data_Abertura,
+                 t.Data_Fechamento,
+                 t.Prioridade,
+                 t.ID_CLIENTE AS ID_Cliente,
+                 t.ID_SETOR AS ID_Setor,
+                 t.Nome_Cliente AS ClienteNome,
+                 s.Nome AS SetorNome,
+                 t.Imagem
+               FROM CHAMADOS t
+               LEFT JOIN SETORES s ON t.ID_SETOR = s.ID_Setor
+               WHERE t.ID_CHAMADO = ?`,
+            [result.insertId]
+        );
+
+        const ticket = rows[0];
+        
+        // ✅ FORMATAR IMAGENS PARA RETORNO
+        if (ticket.Imagem) {
+            const imageArray = ticket.Imagem.split(',');
+            ticket.Imagens = imageArray.map(img => `/uploads/${img}`);
+        } else {
+            ticket.Imagens = [];
+        }
+
+        console.log('🎉 Ticket criado com sucesso:', {
+            id: ticket.ID_Ticket,
+            titulo: ticket.Titulo,
+            imagens: ticket.Imagens.length
+        });
+
+        res.status(201).json({
+            message: 'Ticket criado com sucesso',
+            ticket: ticket
+        });
+
     } catch (err) {
         console.error('[POST /tickets] erro:', err.message);
-        res.status(500).json({ error: 'Erro interno' });
+        res.status(500).json({ error: 'Erro interno: ' + err.message });
     }
 });
 
