@@ -1082,27 +1082,19 @@ app.put('/admin/reativar/:tipo/:id', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: atualizar imagens do ticket - COM VERIFICAÇÃO DE PERMISSÃO
+   Rota: atualizar imagens do ticket - CORRIGIDA
 ----------------------------*/
 app.put('/tickets/:id/imagens', upload.array('Imagens', 5), async (req, res) => {
     try {
         const ticketId = parseInt(req.params.id, 10);
-        const { imagens_remover, ID_Cliente } = req.body; // ✅ RECEBER ID DO CLIENTE
+        const { imagens_remover } = req.body;
 
         console.log('🔄 Atualizando imagens do ticket:', ticketId);
         console.log('📸 Imagens para remover:', imagens_remover);
-        console.log('👤 ID do Cliente solicitante:', ID_Cliente);
 
-        if (!ID_Cliente) {
-            return res.status(400).json({ error: 'ID do cliente é obrigatório' });
-        }
-
-        // ✅ BUSCAR TICKET E VERIFICAR PERMISSÕES
+        // Buscar ticket atual
         const [ticketRows] = await dbPromise.query(
-            `SELECT t.ID_CHAMADO, t.ID_CLIENTE, c.Perfil_Acesso 
-             FROM CHAMADOS t 
-             LEFT JOIN CLIENTES c ON t.ID_CLIENTE = c.ID_CLIENTE 
-             WHERE t.ID_CHAMADO = ?`,
+            'SELECT Imagem FROM CHAMADOS WHERE ID_CHAMADO = ?',
             [ticketId]
         );
 
@@ -1110,42 +1102,8 @@ app.put('/tickets/:id/imagens', upload.array('Imagens', 5), async (req, res) => 
             return res.status(404).json({ error: 'Ticket não encontrado.' });
         }
 
-        const ticket = ticketRows[0];
-        const userId = parseInt(ID_Cliente, 10);
-
-        // ✅ VERIFICAR PERMISSÃO DO USUÁRIO
-        const [userRows] = await dbPromise.query(
-            'SELECT Perfil_Acesso FROM CLIENTES WHERE ID_CLIENTE = ?',
-            [userId]
-        );
-
-        if (userRows.length === 0) {
-            return res.status(404).json({ error: 'Usuário não encontrado.' });
-        }
-
-        const userPerfil = userRows[0].Perfil_Acesso;
-
-        console.log('🔐 Verificação de permissão:', {
-            ticketDono: ticket.ID_CLIENTE,
-            usuarioLogado: userId,
-            perfilUsuario: userPerfil,
-            mesmoUsuario: String(ticket.ID_CLIENTE) === String(userId)
-        });
-
-        // ✅ LÓGICA DE PERMISSÃO: Técnicos/Admins podem editar qualquer ticket, usuários só os próprios
-        if (userPerfil === 'Tecnico' || userPerfil === 'Admin') {
-            console.log('✅ Usuário é técnico/admin - permitindo edição de imagens');
-        } else {
-            // Usuário comum - só pode editar seus próprios tickets
-            if (String(ticket.ID_CLIENTE) !== String(userId)) {
-                return res.status(403).json({ 
-                    error: 'Você não tem permissão para editar as imagens deste ticket.' 
-                });
-            }
-            console.log('✅ Usuário comum editando próprio ticket - permitindo');
-        }
-
         let imagensAtuais = [];
+        const ticket = ticketRows[0];
         
         // ✅ PROCESSAR IMAGENS EXISTENTES CORRETAMENTE
         if (ticket.Imagem) {
