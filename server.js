@@ -125,11 +125,11 @@ app.use((err, req, res, next) => {
 // ======================
 
 /* ---------------------------
-   Rota: cadastrar cliente
+   Rota: cadastrar cliente - ATUALIZADA
 ----------------------------*/
 app.post('/clientes', async (req, res) => {
   try {
-    const { Nome, Email, Senha } = req.body;
+    const { Nome, Email, Senha, Perfil_Acesso } = req.body; // ✅ RECEBER PERFIL_ACESSO
 
     if (!Nome || !Email || !Senha) {
       return res.status(400).json({ error: 'Nome, Email e Senha são obrigatórios.' });
@@ -140,6 +140,9 @@ app.post('/clientes', async (req, res) => {
     if (!emailRegex.test(Email)) {
       return res.status(400).json({ error: 'Email inválido.' });
     }
+
+    // ✅ DEFINIR PERFIL PADRÃO SE NÃO ENVIADO
+    const perfilAcesso = Perfil_Acesso || 'Usuario';
 
     // Verificar se email já existe (case insensitive)
     const [exists] = await dbPromise.query(
@@ -155,10 +158,10 @@ app.post('/clientes', async (req, res) => {
     const saltRounds = 12;
     const senhaHash = await bcrypt.hash(Senha, saltRounds);
 
-    // Inserir usuário
+    // ✅ ATUALIZAR QUERY PARA INCLUIR PERFIL_ACESSO
     const [result] = await dbPromise.query(
-      'INSERT INTO CLIENTES (Nome, Email, Senha_hash) VALUES (?, ?, ?)',
-      [Nome.trim(), Email.trim().toLowerCase(), senhaHash]
+      'INSERT INTO CLIENTES (Nome, Email, Senha_hash, Perfil_Acesso) VALUES (?, ?, ?, ?)',
+      [Nome.trim(), Email.trim().toLowerCase(), senhaHash, perfilAcesso] // ✅ ADICIONAR PERFIL
     );
 
     return res.status(201).json({
