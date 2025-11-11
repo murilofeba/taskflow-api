@@ -1282,6 +1282,91 @@ app.put('/tickets/:id/imagens', upload.array('Imagens', 5), async (req, res) => 
 });
 
 /* ---------------------------
+   Rota: diagnóstico do servidor
+----------------------------*/
+app.get('/diagnostico', async (req, res) => {
+    try {
+        const uploadDir = path.join(process.cwd(), 'uploads');
+        const existePasta = fs.existsSync(uploadDir);
+        
+        let arquivos = [];
+        let tamanhoTotal = 0;
+        
+        if (existePasta) {
+            arquivos = fs.readdirSync(uploadDir);
+            
+            // Calcular tamanho total
+            arquivos.forEach(arquivo => {
+                const filePath = path.join(uploadDir, arquivo);
+                try {
+                    const stats = fs.statSync(filePath);
+                    tamanhoTotal += stats.size;
+                } catch (e) {
+                    console.log('Erro ao ler arquivo:', arquivo, e.message);
+                }
+            });
+        }
+        
+        // Informações do sistema
+        const info = {
+            servidor: {
+                nome: 'TaskFlow API',
+                ambiente: process.env.NODE_ENV || 'development',
+                porta: process.env.PORT || 3000,
+                timestamp: new Date().toISOString()
+            },
+            uploads: {
+                pasta_existe: existePasta,
+                caminho: uploadDir,
+                total_arquivos: arquivos.length,
+                tamanho_total_bytes: tamanhoTotal,
+                tamanho_total_mb: (tamanhoTotal / (1024 * 1024)).toFixed(2),
+                arquivos: arquivos.slice(0, 10) // Mostrar apenas os 10 primeiros
+            },
+            banco_dados: {
+                status: 'OK' // Poderia adicionar teste de conexão aqui
+            }
+        };
+        
+        res.json(info);
+        
+    } catch (err) {
+        res.status(500).json({ error: 'Erro no diagnóstico: ' + err.message });
+    }
+});
+
+/* ---------------------------
+   Rota: verificar arquivo específico
+----------------------------*/
+app.get('/verificar-arquivo/:nome', async (req, res) => {
+    try {
+        const nomeArquivo = req.params.nome;
+        const filePath = path.join(process.cwd(), 'uploads', nomeArquivo);
+        const existe = fs.existsSync(filePath);
+        
+        let infoArquivo = {};
+        if (existe) {
+            const stats = fs.statSync(filePath);
+            infoArquivo = {
+                tamanho: stats.size,
+                criado: stats.birthtime,
+                modificado: stats.mtime
+            };
+        }
+        
+        res.json({
+            arquivo: nomeArquivo,
+            existe: existe,
+            caminho: filePath,
+            info: infoArquivo
+        });
+        
+    } catch (err) {
+        res.status(500).json({ error: 'Erro ao verificar arquivo: ' + err.message });
+    }
+});
+
+/* ---------------------------
    Inicializa o servidor
 ----------------------------*/
 const PORT = process.env.PORT || 3000;
