@@ -21,8 +21,6 @@ const app = express();
 app.use(helmet());
 app.use(cors({
   origin: [
-    'http://localhost:3000',
-    'http://10.0.2.2:3000',
     'https://taskflow-api-055k.onrender.com' // sua URL do Render
   ],
   credentials: true
