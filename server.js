@@ -399,62 +399,120 @@ app.get('/tickets', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: criar ticket com MÚLTIPLAS imagens - PADRONIZADA PARA TODOS OS APPS
+   Rota: criar ticket com MÚLTIPLAS imagens - PADRONIZADA
 ----------------------------*/
 app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
     try {
-        console.log('📝 Criando novo ticket...');
+        console.log('🎯 NOVO TICKET - INICIANDO PROCESSAMENTO');
         console.log('📦 Dados recebidos:', req.body);
         console.log('🖼️ Arquivos recebidos:', req.files ? req.files.length : 0);
 
+        // ✅ LOG DETALHADO DOS ARQUIVOS
+        if (req.files && req.files.length > 0) {
+            req.files.forEach((file, index) => {
+                console.log(`📄 Arquivo ${index + 1}:`, {
+                    nome_original: file.originalname,
+                    tamanho: file.size,
+                    mimetype: file.mimetype,
+                    campo: file.fieldname
+                });
+            });
+        }
+
         const { Titulo, Descricao, Prioridade, ID_Cliente, Nome_Cliente, ID_Setor } = req.body;
 
+        // ✅ VALIDAÇÃO DOS CAMPOS OBRIGATÓRIOS
         if (!Titulo || !Descricao || !Prioridade || !ID_Cliente || !Nome_Cliente) {
+            console.log('❌ Campos obrigatórios faltando:', {
+                Titulo: !!Titulo,
+                Descricao: !!Descricao,
+                Prioridade: !!Prioridade,
+                ID_Cliente: !!ID_Cliente,
+                Nome_Cliente: !!Nome_Cliente
+            });
             return res.status(400).json({ error: 'Título, Descrição, Prioridade e Cliente são obrigatórios.' });
         }
 
-        // Validar prioridade
+        // ✅ VALIDAR PRIORIDADE
         if (!['Baixa', 'Média', 'Alta'].includes(Prioridade)) {
-            return res.status(400).json({ error: 'Prioridade inválida' });
+            console.log('❌ Prioridade inválida:', Prioridade);
+            return res.status(400).json({ error: 'Prioridade inválida. Use: Baixa, Média ou Alta' });
         }
 
         const dataAbertura = new Date();
+        console.log('📅 Data de abertura:', dataAbertura);
 
-        // ✅ PROCESSAR MÚLTIPLAS IMAGENS COM PADRONIZAÇÃO
+        // ✅ PROCESSAR MÚLTIPLAS IMAGENS COM PADRONIZAÇÃO OBRIGATÓRIA
         let imagensPaths = [];
         if (req.files && req.files.length > 0) {
             const uploadDir = path.join(process.cwd(), 'uploads');
+            
+            // ✅ GARANTIR QUE A PASTA UPLOADS EXISTE
             if (!fs.existsSync(uploadDir)) {
+                console.log('📁 Criando pasta uploads...');
                 fs.mkdirSync(uploadDir, { recursive: true });
             }
             
-            console.log('💾 Salvando imagens com nome padronizado...');
-            for (let file of req.files) {
-                // ✅ PADRONIZAR NOME DO ARQUIVO PARA TODOS OS APPS
+            console.log('💾 Iniciando salvamento de imagens...');
+            
+            for (let i = 0; i < req.files.length; i++) {
+                const file = req.files[i];
                 const nomeOriginal = file.originalname;
-                const extensao = path.extname(nomeOriginal) || '.jpg'; // Fallback para .jpg
                 
-                // Gerar nome padronizado: img_timestamp_random.extensao
+                console.log(`🔄 Processando imagem ${i + 1}: ${nomeOriginal}`);
+
+                // ✅ PADRONIZAÇÃO OBRIGATÓRIA - SEMPRE GERAR NOME NOVO
+                const extensao = path.extname(nomeOriginal) || '.jpg';
+                
+                // Gerar nome completamente novo e padronizado
                 const timestamp = Date.now();
                 const randomStr = Math.random().toString(36).substring(2, 9); // 7 caracteres aleatórios
-                const fileName = `img_${timestamp}_${randomStr}${extensao}`;
+                const fileName = `img_${timestamp}_${randomStr}${extensao.toLowerCase()}`;
                 
                 const filePath = path.join(uploadDir, fileName);
                 
                 try {
+                    // ✅ SALVAR ARQUIVO NO SERVIDOR
                     fs.writeFileSync(filePath, file.buffer);
                     imagensPaths.push(fileName);
-                    console.log('✅ Imagem salva (padronizada):', fileName, 'de:', nomeOriginal);
+                    
+                    console.log('✅ Imagem salva com sucesso:', {
+                        nome_original: nomeOriginal,
+                        nome_padronizado: fileName,
+                        tamanho: file.size,
+                        caminho: filePath
+                    });
+                    
                 } catch (fileError) {
-                    console.error('❌ Erro ao salvar imagem:', fileError.message);
+                    console.error(`❌ Erro ao salvar imagem ${i + 1}:`, fileError.message);
                     // Continua processando outras imagens mesmo se uma falhar
                 }
             }
+            
+            console.log(`🎉 Total de imagens processadas: ${imagensPaths.length}/${req.files.length}`);
+        } else {
+            console.log('ℹ️ Nenhuma imagem para processar');
         }
 
         console.log('📋 Imagens a serem salvas no banco:', imagensPaths);
 
-        // ✅ INSERIR TICKET NO BANCO
+        // ✅ VALIDAR E CONVERTER IDs
+        const idClienteNum = parseInt(ID_Cliente, 10);
+        const idSetorNum = ID_Setor ? parseInt(ID_Setor, 10) : null;
+
+        if (isNaN(idClienteNum)) {
+            console.log('❌ ID_Cliente inválido:', ID_Cliente);
+            return res.status(400).json({ error: 'ID_Cliente inválido' });
+        }
+
+        if (ID_Setor && isNaN(idSetorNum)) {
+            console.log('❌ ID_Setor inválido:', ID_Setor);
+            return res.status(400).json({ error: 'ID_Setor inválido' });
+        }
+
+        // ✅ INSERIR TICKET NO BANCO DE DADOS
+        console.log('💾 Inserindo ticket no banco de dados...');
+        
         const [result] = await dbPromise.query(
             `INSERT INTO CHAMADOS 
              (Titulo, Descricao, ChamadoStatus, Data_Abertura, Data_Fechamento, Prioridade, ID_CLIENTE, Nome_Cliente, ID_SETOR, Imagem)
@@ -462,20 +520,22 @@ app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
             [
                 Titulo.trim(),
                 Descricao.trim(),
-                'Aberto',
+                'Aberto', // Status padrão
                 dataAbertura,
-                null,
+                null, // Data_Fechamento inicialmente nula
                 Prioridade,
-                parseInt(ID_Cliente, 10),
+                idClienteNum,
                 Nome_Cliente.trim(),
-                ID_Setor || null,
+                idSetorNum,
                 imagensPaths.length > 0 ? imagensPaths.join(',') : null // Salva como string separada por vírgulas
             ]
         );
 
-        console.log('✅ Ticket criado no banco com ID:', result.insertId);
+        const ticketId = result.insertId;
+        console.log('✅ Ticket criado no banco com ID:', ticketId);
 
-        // ✅ BUSCAR TICKET CRIADO
+        // ✅ BUSCAR TICKET CRIADO PARA RETORNO COMPLETO
+        console.log('🔍 Buscando dados completos do ticket...');
         const [rows] = await dbPromise.query(
             `SELECT
                  t.ID_CHAMADO AS ID_Ticket,
@@ -489,12 +549,18 @@ app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
                  t.ID_SETOR AS ID_Setor,
                  t.Nome_Cliente AS ClienteNome,
                  s.Nome AS SetorNome,
-                 t.Imagem
+                 t.Imagem,
+                 t.Tecnico
                FROM CHAMADOS t
                LEFT JOIN SETORES s ON t.ID_SETOR = s.ID_Setor
                WHERE t.ID_CHAMADO = ?`,
-            [result.insertId]
+            [ticketId]
         );
+
+        if (rows.length === 0) {
+            console.error('❌ Ticket não encontrado após criação. ID:', ticketId);
+            return res.status(500).json({ error: 'Erro ao recuperar ticket criado' });
+        }
 
         const ticket = rows[0];
         
@@ -509,18 +575,27 @@ app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
         console.log('🎉 Ticket criado com sucesso:', {
             id: ticket.ID_Ticket,
             titulo: ticket.Titulo,
-            imagens: ticket.Imagens.length,
+            cliente: ticket.ClienteNome,
+            setor: ticket.SetorNome,
+            prioridade: ticket.Prioridade,
+            total_imagens: ticket.Imagens.length,
             nomes_imagens: ticket.Imagem
         });
 
+        // ✅ RETORNAR RESPOSTA DE SUCESSO
         res.status(201).json({
             message: 'Ticket criado com sucesso',
             ticket: ticket
         });
 
     } catch (err) {
-        console.error('[POST /tickets] erro:', err.message);
-        res.status(500).json({ error: 'Erro interno: ' + err.message });
+        console.error('💥 [POST /tickets] ERRO CRÍTICO:', err.message);
+        console.error('Stack trace:', err.stack);
+        
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: process.env.NODE_ENV === 'development' ? err.message : undefined
+        });
     }
 });
 
