@@ -399,9 +399,9 @@ app.get('/tickets', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: criar ticket com MÚLTIPLAS imagens - CORRIGIDA
+   Rota: criar ticket com MÚLTIPLAS imagens - PADRONIZADA PARA TODOS OS APPS
 ----------------------------*/
-app.post('/tickets', upload.array('Imagens', 5), async (req, res) => { // ✅ Mude para 'Imagens' PLURAL
+app.post('/tickets', upload.array('Imagens', 5), async (req, res) => {
     try {
         console.log('📝 Criando novo ticket...');
         console.log('📦 Dados recebidos:', req.body);
@@ -420,7 +420,7 @@ app.post('/tickets', upload.array('Imagens', 5), async (req, res) => { // ✅ Mu
 
         const dataAbertura = new Date();
 
-        // ✅ PROCESSAR MÚLTIPLAS IMAGENS
+        // ✅ PROCESSAR MÚLTIPLAS IMAGENS COM PADRONIZAÇÃO
         let imagensPaths = [];
         if (req.files && req.files.length > 0) {
             const uploadDir = path.join(process.cwd(), 'uploads');
@@ -428,13 +428,27 @@ app.post('/tickets', upload.array('Imagens', 5), async (req, res) => { // ✅ Mu
                 fs.mkdirSync(uploadDir, { recursive: true });
             }
             
-            console.log('💾 Salvando imagens...');
+            console.log('💾 Salvando imagens com nome padronizado...');
             for (let file of req.files) {
-                const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.originalname}`;
+                // ✅ PADRONIZAR NOME DO ARQUIVO PARA TODOS OS APPS
+                const nomeOriginal = file.originalname;
+                const extensao = path.extname(nomeOriginal) || '.jpg'; // Fallback para .jpg
+                
+                // Gerar nome padronizado: img_timestamp_random.extensao
+                const timestamp = Date.now();
+                const randomStr = Math.random().toString(36).substring(2, 9); // 7 caracteres aleatórios
+                const fileName = `img_${timestamp}_${randomStr}${extensao}`;
+                
                 const filePath = path.join(uploadDir, fileName);
-                fs.writeFileSync(filePath, file.buffer);
-                imagensPaths.push(fileName);
-                console.log('✅ Imagem salva:', fileName);
+                
+                try {
+                    fs.writeFileSync(filePath, file.buffer);
+                    imagensPaths.push(fileName);
+                    console.log('✅ Imagem salva (padronizada):', fileName, 'de:', nomeOriginal);
+                } catch (fileError) {
+                    console.error('❌ Erro ao salvar imagem:', fileError.message);
+                    // Continua processando outras imagens mesmo se uma falhar
+                }
             }
         }
 
@@ -495,7 +509,8 @@ app.post('/tickets', upload.array('Imagens', 5), async (req, res) => { // ✅ Mu
         console.log('🎉 Ticket criado com sucesso:', {
             id: ticket.ID_Ticket,
             titulo: ticket.Titulo,
-            imagens: ticket.Imagens.length
+            imagens: ticket.Imagens.length,
+            nomes_imagens: ticket.Imagem
         });
 
         res.status(201).json({
@@ -1082,7 +1097,7 @@ app.put('/admin/reativar/:tipo/:id', async (req, res) => {
 });
 
 /* ---------------------------
-   Rota: atualizar imagens do ticket - CORRIGIDA
+   Rota: atualizar imagens do ticket - PADRONIZADA
 ----------------------------*/
 app.put('/tickets/:id/imagens', upload.array('Imagens', 5), async (req, res) => {
     try {
@@ -1107,11 +1122,9 @@ app.put('/tickets/:id/imagens', upload.array('Imagens', 5), async (req, res) => 
         
         // ✅ PROCESSAR IMAGENS EXISTENTES CORRETAMENTE
         if (ticket.Imagem) {
-            // Se é string com vírgulas, separar
             if (ticket.Imagem.includes(',')) {
                 imagensAtuais = ticket.Imagem.split(',').map(img => img.trim());
             } else {
-                // Se é uma única imagem
                 imagensAtuais = [ticket.Imagem.trim()];
             }
         }
@@ -1142,7 +1155,7 @@ app.put('/tickets/:id/imagens', upload.array('Imagens', 5), async (req, res) => 
             }
         }
 
-        // ✅ ADICIONAR NOVAS IMAGENS
+        // ✅ ADICIONAR NOVAS IMAGENS COM PADRONIZAÇÃO
         let novasImagensPaths = [];
         if (req.files && req.files.length > 0) {
             const uploadDir = path.join(process.cwd(), 'uploads');
@@ -1150,12 +1163,20 @@ app.put('/tickets/:id/imagens', upload.array('Imagens', 5), async (req, res) => 
                 fs.mkdirSync(uploadDir, { recursive: true });
             }
             
+            console.log('💾 Salvando novas imagens com nome padronizado...');
             for (let file of req.files) {
-                const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.originalname}`;
+                // ✅ PADRONIZAR NOME DO ARQUIVO (MESMO PADRÃO DA CRIAÇÃO)
+                const nomeOriginal = file.originalname;
+                const extensao = path.extname(nomeOriginal) || '.jpg';
+                
+                const timestamp = Date.now();
+                const randomStr = Math.random().toString(36).substring(2, 9);
+                const fileName = `img_${timestamp}_${randomStr}${extensao}`;
+                
                 const filePath = path.join(uploadDir, fileName);
                 fs.writeFileSync(filePath, file.buffer);
                 novasImagensPaths.push(fileName);
-                console.log('✅ Nova imagem salva:', fileName);
+                console.log('✅ Nova imagem salva (padronizada):', fileName, 'de:', nomeOriginal);
             }
         }
 
